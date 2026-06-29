@@ -2,6 +2,8 @@
 
 > Independent Instagram analytics platform. Built on **Instaloader**, **Crawlee**, **Playwright**, and **Gemini AI**.
 
+**Live: https://instalovon.vercel.app** · **Repo: https://github.com/fjosmoreno/instalovon** · **License:** MIT
+
 Paste a public Instagram profile URL, get a structured report in seconds — strengths,
 weaknesses, recommended actions. No API quota, no Meta approval process, fully open architecture.
 

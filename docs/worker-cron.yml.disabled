@@ -1,0 +1,107 @@
+# Worker cron job — Insta Lovon
+#
+# This workflow runs the platform's worker process on GitHub-hosted infrastructure.
+# It's the simplest way to keep the platform working without paying for an
+# always-on VM. The worker:
+#   1. Polls Postgres for the next pending Job row
+#   2. Extracts each username via the Python Instaloader sidecar
+#   3. Asks Gemini for the report
+#   4. Updates the Job row to succeeded/failed
+#
+# ─── ACTIVATION ───────────────────────────────────────────────────────────────
+#
+# 1. Add the following secrets to your GitHub repo
+#    (Settings → Secrets and variables → Actions → New repository secret):
+#       DATABASE_URL     full Postgres connection string (Neon / Supabase / etc.)
+#       GEMINI_API_KEY   an AIza… key from https://aistudio.google.com/apikey
+#       AUTH_SECRET      any 32+ char random string (only needed by the web,
+#                        but harmless to set here)
+#
+# 2. Move this file into the GitHub-recognized path:
+#       mkdir -p .github/workflows
+#       cp docs/worker-cron.yml.disabled .github/workflows/worker.yml
+#
+# 3. Commit + push (you'll need a PAT with the `workflow` scope, OR you can
+#    create the file directly via the GitHub web UI at
+#    https://github.com/fjosmoreno/instalovon/new/main/.github/workflows?filename=worker.yml).
+#
+# 4. Trigger a manual run from the Actions tab → "Worker cron" → Run workflow.
+#
+# ─── TUNING ──────────────────────────────────────────────────────────────────
+#
+# The cron schedule below fires every 5 minutes. Adjust as you like:
+#   '*/5 * * * *'    every 5 min  (default)
+#   '*/1 * * * *'    every 1 min  (be respectful to Instagram rate limits)
+#   '*/15 * * * *'   every 15 min (safer / cheaper)
+#
+name: Worker cron
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      INSTALOADER_PATH: python3
+      AI_ENABLED: "1"
+      LOG_LEVEL: info
+      WORKER_POLL_INTERVAL_MS: "2000"
+      # Tick for ~5 minutes max within each cron run
+      WORKER_MAX_TICKS: "60"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Node deps (workspaces)
+        run: |
+          npm install --no-audit --no-fund --workspaces=false
+          npm install --no-audit --no-fund \
+            --workspace @instalovon/shared \
+            --workspace @instalovon/db \
+            --workspace @instalovon/ai \
+            --workspace @instalovon/worker
+
+      - name: Install Python deps (Instaloader)
+        run: pip install -r services/instaloader/requirements.txt
+
+      - name: Generate Prisma client
+        run: npm run db:generate
+
+      - name: Run worker (limited tick budget, ~5 min)
+        run: |
+          cat > /tmp/tick-with-budget.mjs <<'EOF'
+          import { spawn } from "node:child_process";
+          import { setTimeout as wait } from "node:timers/promises";
+          const TICKS = Number(process.env.WORKER_MAX_TICKS ?? 60);
+          const INTERVAL = Number(process.env.WORKER_POLL_INTERVAL_MS ?? 2000);
+          const HARD_STOP_MS = 5 * 60 * 1000;
+          const child = spawn("npx", ["tsx", "apps/worker/src/index.ts"], {
+            stdio: "inherit",
+            env: process.env,
+          });
+          const killer = setTimeout(() => {
+            console.log("[runner] hard-stop reached, killing worker");
+            child.kill("SIGTERM");
+          }, HARD_STOP_MS);
+          await new Promise((res) => child.on("exit", res));
+          clearTimeout(killer);
+          EOF
+          node /tmp/tick-with-budget.mjs
