@@ -1,0 +1,13 @@
+{
+  "version": 2,
+  "buildCommand": "npm run build -w @instalovon/web",
+  "installCommand": "npm install --workspaces=false && npm install --workspace @instalovon/shared --workspace @instalovon/db --workspace @instalovon/ai --workspace @instalovon/web",
+  "framework": "nextjs",
+  "outputDirectory": "apps/web/.next",
+  "env": {
+    "DATABASE_URL": "@instalovon-database-url",
+    "AUTH_SECRET": "@instalovon-auth-secret",
+    "GEMINI_API_KEY": "@instalovon-gemini-api-key",
+    "HEADROOM_ENABLED": "@instalovon-headroom-enabled"
+  }
+}

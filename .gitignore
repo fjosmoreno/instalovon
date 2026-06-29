@@ -1,0 +1,78 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+dist/
+.next/
+out/
+build/
+*.tsbuildinfo
+
+# Environment
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Python (services/instaloader)
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+env/
+.env-venv/
+*.egg-info/
+.pytest_cache/
+
+# Coverage
+coverage/
+*.lcov
+
+# Prisma
+packages/db/prisma/migrations/dev.db*
+
+# Crawlee / Playwright
+crawlee_storage/
+playwright-report/
+playwright/.cache/
+test-results/
+playwright/.local-browsers/
+
+# Worker runtime artifacts
+*.pid
+*.seed
+*.pid.lock
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Vercel
+.vercel/
+
+# Railway
+.railway/
+
+# Temporary
+tmp/
+temp/
+.cache/

@@ -1,0 +1,45 @@
+# Dockerfile for @instalovon/worker. Targets Railway / Fly.io / any Docker host.
+# Uses a slim base so Instaloader + Python 3 + Node 22 are both available.
+
+FROM node:22-bookworm-slim AS base
+
+# Install Python 3 + pip + a few libs that instaloader rarely needs.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends python3 python3-pip python3-venv ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Workdir
+WORKDIR /app
+
+# Install Node deps (workspaces-aware)
+COPY package.json package-lock.json* ./
+COPY apps/worker/package.json apps/worker/package.json
+COPY packages/db/package.json packages/db/package.json
+COPY packages/ai/package.json packages/ai/package.json
+COPY packages/shared/package.json packages/shared/package.json
+COPY tsconfig.base.json ./
+COPY services/instaloader/requirements.txt services/instaloader/requirements.txt
+
+RUN npm install --workspaces=false \
+    && npm install --workspace @instalovon/shared --workspace @instalovon/db --workspace @instalovon/ai --workspace @instalovon/worker
+
+# Install Python deps
+RUN pip3 install --no-cache-dir --break-system-packages -r services/instaloader/requirements.txt
+
+# Copy the rest of the source
+COPY packages packages
+COPY apps apps
+COPY services services
+
+# Generate Prisma client for production
+RUN npm run db:generate -w @instalovon/db
+
+# Build worker (emit .js)
+RUN npm run build -w @instalovon/worker
+
+ENV NODE_ENV=production
+ENV INSTALOADER_SCRIPT=/app/services/instaloader/extract.py
+ENV INSTALOADER_PATH=python3
+ENV WORKER_POLL_INTERVAL_MS=5000
+
+CMD ["node", "apps/worker/dist/index.js"]

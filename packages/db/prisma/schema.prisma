@@ -1,0 +1,63 @@
+// Insta Lovon — Prisma schema
+// Postgres-only. Usernames stored in a normalized form (lower-case, no leading "@").
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  jobs         Job[]
+
+  @@index([email])
+}
+
+/// One analysis run. Always tied to a single user.
+/// `usernames` is denormalized as a Postgres string[] for queue convenience.
+model Job {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mode         String // 'single_profile' | 'compare_profiles'
+  usernames    String[]
+  status       String    @default("pending") // pending | running | succeeded | failed | cancelled
+  errorMessage String?
+  /// Inline snapshot for the first profile (or all profiles as JSON array).
+  profileData  Json?
+  /// AI report content (null until worker finishes post-processing).
+  report       Json?
+  recentDays   Int       @default(30)
+  locale       String    @default("pt-BR")
+  /// Identifier of the worker instance that picked the job (for debugging).
+  workerId     String?
+  startedAt    DateTime?
+  finishedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([status, createdAt])
+  @@index([userId, createdAt])
+}
+
+/// Cache of the latest Instagram metadata we successfully fetched for a username.
+/// Avoids hammering Instagram for repeat analyses.
+model ProfileCache {
+  id           String    @id @default(cuid())
+  username     String    @unique
+  lastFetchedAt DateTime
+  snapshot     Json
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([username])
+}

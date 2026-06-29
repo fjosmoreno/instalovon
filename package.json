@@ -1,0 +1,25 @@
+{
+  "name": "instalovon",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Insta Lovon — Instagram analytics platform built on Instaloader + Crawlee + Playwright + Gemini",
+  "license": "MIT",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "dev": "npm run dev --workspaces --parallel",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "db:generate": "npm run db:generate -w @instalovon/db",
+    "db:migrate": "npm run db:migrate -w @instalovon/db",
+    "db:studio": "npm run db:studio -w @instalovon/db",
+    "worker:start": "npm run start -w @instalovon/worker",
+    "web:dev": "npm run dev -w @instalovon/web"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

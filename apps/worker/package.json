@@ -1,0 +1,27 @@
+{
+  "name": "@instalovon/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@instalovon/ai": "*",
+    "@instalovon/db": "*",
+    "@instalovon/shared": "*",
+    "@prisma/client": "^5.22.0",
+    "crawlee": "^3.13.0",
+    "playwright": "^1.49.0",
+    "pino": "^9.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.0"
+  }
+}
