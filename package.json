@@ -9,15 +9,18 @@
     "packages/*"
   ],
   "scripts": {
+    "postinstall": "npm run db:generate --workspace=@instalovon/db",
     "build": "npm run build --workspaces --if-present",
     "dev": "npm run dev --workspaces --parallel",
     "lint": "npm run lint --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "db:generate": "npm run db:generate -w @instalovon/db",
     "db:migrate": "npm run db:migrate -w @instalovon/db",
+    "db:push": "prisma db push --schema=packages/db/prisma/schema.prisma --skip-generate",
     "db:studio": "npm run db:studio -w @instalovon/db",
     "worker:start": "npm run start -w @instalovon/worker",
-    "web:dev": "npm run dev -w @instalovon/web"
+    "web:dev": "npm run dev -w @instalovon/web",
+    "vercel-build": "prisma generate --schema=packages/db/prisma/schema.prisma && npm run build -w @instalovon/web"
   },
   "engines": {
     "node": ">=20.0.0"
