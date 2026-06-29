@@ -15,6 +15,7 @@
   "dependencies": {
     "@google/generative-ai": "^0.24.0",
     "headroom-ai": "^0.1.0",
+    "openai": "^4.77.0",
     "@instalovon/shared": "*"
   },
   "devDependencies": {

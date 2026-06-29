@@ -1,67 +1,98 @@
 /**
  * Gemini wrapper with optional Headroom integration.
  *
- * Activated via env `HEADROOM_ENABLED=1`. When disabled (default in dev) or when
- * Headroom itself fails to load (cold-start/network), calls fall through to the
- * raw SDK silently. Same activation model as VoiceBridge / Lovon-Agent.
+ * Two activation paths:
+ *
+ *   1. Default: native @google/generative-ai SDK, direct → Google.
+ *
+ *   2. HEADROOM_ENABLED=1: route Gemini calls through Gemini's OpenAI-compatible
+ *      endpoint (`https://generativelanguage.googleapis.com/v1beta/openai`) using
+ *      headroom-ai/openai adapter. headroom-ai 0.x ships adapters for OpenAI /
+ *      Anthropic / Vercel AI but not yet for a first-party Gemini SDK, so we lean
+ *      on Gemini's OpenAI compatibility layer — same model, same API key, same
+ *      response shape, but the request body is intercepted by Headroom's
+ *      compressor before it leaves the box (or goes through the headroom proxy
+ *      when HEADROOM_URL is set).
+ *
+ *      Activated via two env vars:
+ *        HEADROOM_ENABLED=1
+ *        HEADROOM_URL=http://127.0.0.1:8787/v1   (optional — points at the
+ *                                                  Headroom proxy container if
+ *                                                  you run one; defaults to
+ *                                                  in-process compression).
  */
 import { GoogleGenerativeAI, type GenerativeModel } from "@google/generative-ai";
+import OpenAI from "openai";
+import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import type { AIReport, InstagramProfileSnapshot, ReportSection } from "@instalovon/shared";
 
 const HEADROOM_ENABLED = process.env.HEADROOM_ENABLED === "1";
+const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
+const HEADROOM_URL = process.env.HEADROOM_URL;
 
-let cachedModel: GenerativeModel | null = null;
+/**
+ * Lazily-built OpenAI-compatible client pointed at Gemini, optionally wrapped
+ * through Headroom.
+ */
+let cachedOpenAI: { client: OpenAI; wrapped: boolean } | null = null;
 let cachedKey: string | null = null;
 
-function getModel(): GenerativeModel {
+async function getOpenAIClient(): Promise<OpenAI> {
   const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error("GEMINI_API_KEY env var is required");
+  if (!apiKey) throw new Error("GEMINI_API_KEY env var is required");
+  if (!cachedOpenAI || cachedKey !== apiKey) {
+    const client = new OpenAI({
+      apiKey,
+      baseURL:
+        HEADROOM_URL && HEADROOM_URL.length > 0
+          ? `${HEADROOM_URL.replace(/\/$/, "")}` // we let headroom proxy redirect
+          : "https://generativelanguage.googleapis.com/v1beta/openai",
+      defaultHeaders: HEADROOM_URL
+        ? { "x-headroom-provider": "gemini" }
+        : undefined,
+    });
+    let wrapped = false;
+    if (HEADROOM_ENABLED) {
+      try {
+        const mod = await import("headroom-ai/openai");
+        const withHeadroom = (mod as any).withHeadroom as
+          | ((client: OpenAI) => OpenAI)
+          | undefined;
+        if (typeof withHeadroom === "function") {
+          cachedOpenAI = { client: withHeadroom(client), wrapped: true };
+          wrapped = true;
+        }
+      } catch (err) {
+        console.warn(
+          "[ai] HEADROOM_ENABLED=1 but headroom-ai/openai wrapper missing — falling back to raw SDK:",
+          (err as Error).message
+        );
+      }
+    }
+    if (!wrapped) cachedOpenAI = { client, wrapped: false };
+    cachedKey = apiKey;
   }
-  if (!cachedModel || cachedKey !== apiKey) {
+  return cachedOpenAI!.client;
+}
+
+let cachedGemini: GenerativeModel | null = null;
+let cachedGeminiKey: string | null = null;
+
+function getGeminiDirectModel(): GenerativeModel {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error("GEMINI_API_KEY env var is required");
+  if (!cachedGemini || cachedGeminiKey !== apiKey) {
     const client = new GoogleGenerativeAI(apiKey);
-    cachedModel = client.getGenerativeModel({
-      model: process.env.GEMINI_MODEL ?? "gemini-2.5-flash",
+    cachedGemini = client.getGenerativeModel({
+      model: GEMINI_MODEL,
       generationConfig: {
         temperature: 0.7,
         responseMimeType: "application/json",
       },
     });
-    cachedKey = apiKey;
+    cachedGeminiKey = apiKey;
   }
-  return cachedModel;
-}
-
-/**
- * Returns the model, optionally wrapped via Headroom.
- *
- * Note: headroom-ai 0.x ships adapters for Vercel AI / OpenAI / Anthropic only.
- * When HEADROOM_ENABLED=1 we use the OpenAI-compat path as a no-op shim: the
- * SDK call still goes direct to Gemini, but we shrink the prompt with a
- * static compression ratio logger so the operator sees savings in logs.
- * For zero overhead when the gemini adapter lands in headroom-ai, only the
- * import target changes.
- */
-async function getMaybeWrappedModel(): Promise<GenerativeModel> {
-  const base = getModel();
-  if (!HEADROOM_ENABLED) return base;
-  try {
-    // Future: replace with `import("headroom-ai/gemini")` once that adapter
-    // ships. For now we run a HEADROOM_ENABLED noop and let the user wire a
-    // proxy at the gateway level if they want true compression.
-    await import("headroom-ai");
-    if (HEADROOM_ENABLED) {
-      // eslint-disable-next-line no-console
-      console.info(
-        "[ai] HEADROOM_ENABLED=1 but headroom-ai/gemini adapter not yet shipped; " +
-          "calls go direct. To cut tokens now, route Gemini traffic through " +
-          "the headroom proxy at the HTTPS edge."
-      );
-    }
-  } catch {
-    // package not installed: ignore
-  }
-  return base;
+  return cachedGemini;
 }
 
 const REPORT_PROMPT = (locale: string) => `You are a senior Instagram strategist.
@@ -90,30 +121,25 @@ export async function generateReport(
   opts: { locale?: string } = {}
 ): Promise<AIReport> {
   const locale = opts.locale ?? "pt-BR";
-  const model = await getMaybeWrappedModel();
-  const prompt = REPORT_PROMPT(locale);
   const userPayload = JSON.stringify({ profiles }, null, 2);
+  const promptHeader = REPORT_PROMPT(locale);
+  const input = promptHeader + "\n\nINPUT:\n" + userPayload;
 
-  const result = await model.generateContent({
-    contents: [
-      {
-        role: "user",
-        parts: [{ text: prompt + "\n\nINPUT:\n" + userPayload }],
-      },
-    ],
-  });
+  let raw: string;
+  if (HEADROOM_ENABLED) {
+    raw = await generateViaOpenAICompat(input);
+  } else {
+    raw = await generateViaNativeGemini(input);
+  }
 
-  const raw = result.response.text();
   let parsed: AIReport;
   try {
     parsed = JSON.parse(raw);
   } catch {
-    // Gemini occasionally wraps JSON in ```json fences. Strip.
     const cleaned = raw.replace(/```json|```/g, "").trim();
     parsed = JSON.parse(cleaned);
   }
 
-  // Backfill metadata fields, validate shape, ensure arrays.
   const safeSection = (s: any): ReportSection => ({
     title: typeof s?.title === "string" ? s.title : "Section",
     body: typeof s?.body === "string" ? s.body : "",
@@ -129,12 +155,33 @@ export async function generateReport(
     recommendedActions: Array.isArray(parsed.recommendedActions)
       ? parsed.recommendedActions
       : [],
-    sections: Array.isArray(parsed.sections)
-      ? parsed.sections.map(safeSection)
-      : [],
+    sections: Array.isArray(parsed.sections) ? parsed.sections.map(safeSection) : [],
     generatedAt: new Date().toISOString(),
-    model: process.env.GEMINI_MODEL ?? "gemini-2.5-flash",
+    model: GEMINI_MODEL + (HEADROOM_ENABLED ? " +headroom" : ""),
   };
+}
+
+async function generateViaNativeGemini(input: string): Promise<string> {
+  const model = getGeminiDirectModel();
+  const result = await model.generateContent({
+    contents: [{ role: "user", parts: [{ text: input }] }],
+  });
+  return result.response.text();
+}
+
+async function generateViaOpenAICompat(input: string): Promise<string> {
+  const client = await getOpenAIClient();
+  const messages: ChatCompletionMessageParam[] = [
+    { role: "system", content: "You produce concise JSON-only outputs." },
+    { role: "user", content: input },
+  ];
+  const completion = await client.chat.completions.create({
+    model: GEMINI_MODEL,
+    messages,
+    temperature: 0.7,
+    response_format: { type: "json_object" },
+  });
+  return completion.choices[0]?.message?.content ?? "";
 }
 
 export interface ProgressEvent {
@@ -147,7 +194,15 @@ export interface ProgressEvent {
  */
 export async function healthCheck(): Promise<boolean> {
   try {
-    const model = await getMaybeWrappedModel();
+    if (HEADROOM_ENABLED) {
+      const completion = await (await getOpenAIClient()).chat.completions.create({
+        model: GEMINI_MODEL,
+        messages: [{ role: "user", content: "ok" }],
+        max_tokens: 8,
+      });
+      return Boolean(completion.choices[0]?.message?.content);
+    }
+    const model = getGeminiDirectModel();
     const r = await model.generateContent({
       contents: [{ role: "user", parts: [{ text: "ok" }] }],
     });
@@ -156,4 +211,21 @@ export async function healthCheck(): Promise<boolean> {
     console.error("[ai] healthCheck failed:", err);
     return false;
   }
+}
+
+/**
+ * Returns the active configuration summary. Useful for /api/health endpoints.
+ */
+export function configSummary(): {
+  headroom: boolean;
+  headroomUrl: string | null;
+  model: string;
+  transport: "openai-compat" | "native-sdk";
+} {
+  return {
+    headroom: HEADROOM_ENABLED,
+    headroomUrl: HEADROOM_URL ?? null,
+    model: GEMINI_MODEL,
+    transport: HEADROOM_ENABLED ? "openai-compat" : "native-sdk",
+  };
 }
