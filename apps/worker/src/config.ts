@@ -3,6 +3,11 @@
  * For production (Railway, Fly, etc) every value should come from env.
  */
 import process from "node:process";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 function required(name: string): string {
   const v = process.env[name];
@@ -34,8 +39,10 @@ export const config = {
   jobTimeoutMs: intOr("WORKER_JOB_TIMEOUT_MS", 5 * 60_000),
   instaloaderPath: process.env.INSTALOADER_PATH ?? "python3",
   extractScript:
-    process.env.INSTALOADER_SCRIPT ??
-    new URL("../../../../services/instaloader/extract.py", import.meta.url).pathname,
+    process.env.INSTALOADER_SCRIPT &&
+    process.env.INSTALOADER_SCRIPT.length > 0
+      ? process.env.INSTALOADER_SCRIPT
+      : resolve(__dirname, "../../../services/instaloader/extract.py"),
   extractTimeoutMs: intOr("INSTALOADER_TIMEOUT_MS", 90_000),
   maxPostsPerProfile: intOr("MAX_POSTS_PER_PROFILE", 12),
   recentDays: intOr("RECENT_DAYS", 30),
