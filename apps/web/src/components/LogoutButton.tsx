@@ -10,7 +10,7 @@ export function LogoutButton() {
     router.refresh();
   }
   return (
-    <button onClick={onClick} className="btn-ghost">
+    <button onClick={onClick} className="btn-secondary">
       Sign out
     </button>
   );

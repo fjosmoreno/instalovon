@@ -2,11 +2,14 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { ArrowRight, Spinner } from "@/components/icons";
 
 export function NewJobForm() {
   const router = useRouter();
   const [username, setUsername] = useState("");
-  const [mode, setMode] = useState<"single_profile" | "compare_profiles">("single_profile");
+  const [mode, setMode] = useState<"single_profile" | "compare_profiles">(
+    "single_profile"
+  );
   const [locale, setLocale] = useState("pt-BR");
   const [recentDays, setRecentDays] = useState(30);
   const [loading, setLoading] = useState(false);
@@ -17,7 +20,12 @@ export function NewJobForm() {
       .split(/[\s,]+/)
       .map((s) => s.trim())
       .filter(Boolean)
-      .map((s) => s.replace(/^https?:\/\/[^/]*instagram\.com\//, "").replace(/\/$/, "").replace(/^@/, ""))
+      .map((s) =>
+        s
+          .replace(/^https?:\/\/[^/]*instagram\.com\//, "")
+          .replace(/\/$/, "")
+          .replace(/^@/, "")
+      )
       .filter(Boolean);
   }
 
@@ -55,7 +63,7 @@ export function NewJobForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="card space-y-5">
+    <form onSubmit={onSubmit} className="card space-y-6">
       <div>
         <label className="label">Profile URL or username</label>
         <input
@@ -65,12 +73,12 @@ export function NewJobForm() {
           placeholder="@exemplo or https://www.instagram.com/exemplo"
           required
         />
-        <p className="mt-1 text-xs text-ink-500">
+        <p className="mt-2 text-xs text-ink-300">
           Separate multiple profiles with commas for comparison.
         </p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-3">
         <div>
           <label className="label">Mode</label>
           <select
@@ -89,7 +97,7 @@ export function NewJobForm() {
             value={locale}
             onChange={(e) => setLocale(e.target.value)}
           >
-            <option value="pt-BR">Português (Brasil)</option>
+            <option value="pt-BR">Português (BR)</option>
             <option value="en">English</option>
             <option value="es">Español</option>
           </select>
@@ -107,17 +115,28 @@ export function NewJobForm() {
         </div>
       </div>
 
-      <div className="rounded-xl bg-amber-50 px-4 py-3 text-xs text-amber-800">
-        We only analyze <strong>public</strong> profiles. Private profiles, login-gated content
-        and media downloads are intentionally out of scope.
+      <div className="rounded-xl border border-cream-soft/15 bg-cream-soft/[0.04] px-4 py-3 text-xs text-cream-soft/90">
+        We only analyze <strong className="text-cream">public</strong> profiles.
+        Private profiles, login-gated content, and media downloads are
+        intentionally out of scope.
       </div>
 
       {error ? (
-        <div className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div>
+        <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
+          {error}
+        </div>
       ) : null}
 
       <button type="submit" className="btn-primary w-full" disabled={loading}>
-        {loading ? "Creating job…" : "Analyze"}
+        {loading ? (
+          <>
+            <Spinner className="h-4 w-4 animate-spin" /> Creating job…
+          </>
+        ) : (
+          <>
+            Analyze now <ArrowRight className="h-4 w-4" />
+          </>
+        )}
       </button>
     </form>
   );

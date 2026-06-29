@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { Spinner } from "@/components/icons";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -35,47 +36,66 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="mx-auto flex max-w-md flex-col gap-6 px-6 py-16">
-      <div>
-        <h1 className="text-2xl font-bold text-ink-900">Welcome back</h1>
-        <p className="mt-1 text-sm text-ink-600">
-          No account?{" "}
-          <Link href="/signup" className="text-brand underline">
-            Sign up
-          </Link>
-        </p>
+    <div className="relative mx-auto flex min-h-[calc(100vh-4rem)] max-w-md flex-col justify-center px-6 py-16">
+      <div className="absolute inset-0 -z-10 overflow-hidden">
+        <div className="absolute -top-32 left-1/2 h-[420px] w-[420px] -translate-x-1/2 rounded-full bg-primary/20 blur-3xl" />
+        <div className="absolute right-[-15%] top-1/3 h-[320px] w-[320px] rounded-full bg-primary-soft/20 blur-3xl" />
       </div>
-      <form onSubmit={onSubmit} className="card space-y-4">
-        <div>
-          <label className="label">Email</label>
-          <input
-            className="input"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@example.com"
-            autoComplete="email"
-            required
-          />
+
+      <div className="card animate-fade-up">
+        <div className="mb-6">
+          <span className="h-eyebrow">Welcome back</span>
+          <h1 className="mt-2 font-display text-2xl font-semibold tracking-tight">
+            Sign in
+          </h1>
+          <p className="mt-1.5 text-sm text-ink-200">
+            No account?{" "}
+            <Link href="/signup" className="text-cream-soft hover:text-cream underline underline-offset-4">
+              Sign up
+            </Link>
+          </p>
         </div>
-        <div>
-          <label className="label">Password</label>
-          <input
-            className="input"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoComplete="current-password"
-            required
-          />
-        </div>
-        {error ? (
-          <div className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div>
-        ) : null}
-        <button type="submit" className="btn-primary w-full" disabled={loading}>
-          {loading ? "Signing in…" : "Sign in"}
-        </button>
-      </form>
+        <form onSubmit={onSubmit} className="space-y-4">
+          <div>
+            <label className="label">Email</label>
+            <input
+              className="input"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              autoComplete="email"
+              required
+            />
+          </div>
+          <div>
+            <label className="label">Password</label>
+            <input
+              className="input"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+              required
+            />
+          </div>
+          {error ? (
+            <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
+              {error}
+            </div>
+          ) : null}
+          <button type="submit" className="btn-primary w-full" disabled={loading}>
+            {loading ? (
+              <>
+                <Spinner className="h-4 w-4 animate-spin" />
+                Signing in…
+              </>
+            ) : (
+              "Sign in"
+            )}
+          </button>
+        </form>
+      </div>
     </div>
   );
 }
